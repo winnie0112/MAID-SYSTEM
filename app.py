@@ -3,6 +3,8 @@ import pandas as pd
 from datetime import datetime
 import os
 import pypdf
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
 
 # 页面配置
 st.set_page_config(
@@ -138,7 +140,7 @@ elif menu == "Supplier 供应商":
     
     with st.expander("➕ 添加新 Supplier"):
         with st.form("add_supp_form"):
-            s_name = st.print_name = st.text_input("公司名称 (Agency Name)")
+            s_name = st.text_input("公司名称 (Agency Name)")
             s_country = st.text_input("国家", value="Indonesia")
             s_contact = st.text_input("负责人姓名")
             s_phone = st.text_input("联系电话")
@@ -175,9 +177,8 @@ elif menu == "公司资料 (Agency)":
 # ==================== 6. 申请文件与生成 ====================
 elif menu == "申请文件与生成 (Application)":
     st.title("📄 申请文件生成与自动填充")
-    st.markdown("在这里选择关联的**顾客、女佣和供应商**，系统会自动为您一键生成标准化 PDF 文件！")
+    st.markdown("在这里选择关联的**顾客、女佣和供应商**，系统会自动为您一键生成规范的表格 PDF 文件！")
 
-    # 数据选择
     cust_options = [f"{c['name']} — {c['ic']}" for c in st.session_state.customers]
     maid_options = [f"{m['name']} — {m['passport']}" for m in st.session_state.maids]
     supp_options = [s['name'] for s in st.session_state.suppliers]
@@ -188,46 +189,72 @@ elif menu == "申请文件与生成 (Application)":
 
     st.markdown("---")
 
-    # 生成 PDF 函数（示例生成器，包含下载按钮支持）
-    def generate_dummy_pdf(doc_name, data_dict):
-        filename = f"output/{doc_name}_Filled.pdf"
-        # 简单创建一个占位 PDF 方便直接下载测试
-        writer = pypdf.PdfWriter()
-        writer.add_blank_page(width=595, height=842) # A4 尺寸
-        with open(filename, "wb") as f:
-            writer.write(f)
+    # 真实的 PDF 生成函数（带文字排版）
+    def generate_real_pdf(doc_title, cust, maid, supp):
+        filename = f"output/{doc_title}_Filled.pdf"
+        c = canvas.Canvas(filename, pagesize=A4)
+        width, height = A4
+        
+        # 绘制标题栏
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(50, height - 50, f"RELIANCE MAID MANAGEMENT SYSTEM")
+        c.setFont("Helvetica-Bold", 16)
+        c.drawString(50, height - 80, f"APPLICATION FORM: {doc_title}")
+        
+        c.setFont("Helvetica", 10)
+        c.drawString(50, height - 100, f"Generated Date: {datetime.today().strftime('%Y-%m-%d')}")
+        
+        c.line(50, height - 110, width - 50, height - 110)
+        
+        # 填写详细内容
+        y = height - 150
+        c.setFont("Helvetica-Bold", 12)
+        c.drawString(50, y, "A. Employer (Customer) Details:")
+        y -= 25
+        c.setFont("Helvetica", 11)
+        c.drawString(70, y, f"Selected Customer: {cust}")
+        
+        y -= 40
+        c.setFont("Helvetica-Bold", 12)
+        c.drawString(50, y, "B. Domestic Worker (Maid) Details:")
+        y -= 25
+        c.setFont("Helvetica", 11)
+        c.drawString(70, y, f"Selected Maid: {maid}")
+        
+        y -= 40
+        c.setFont("Helvetica-Bold", 12)
+        c.drawString(50, y, "C. Supplier (Agency) Details:")
+        y -= 25
+        c.setFont("Helvetica", 11)
+        c.drawString(70, y, f"Selected Supplier: {supp}")
+        
+        # 底部签名栏
+        c.line(50, 150, 200, 150)
+        c.drawString(50, 135, "Employer Signature")
+        
+        c.line(width - 200, 150, width - 50, 150)
+        c.drawString(width - 200, 135, "Agency Authorized Signature")
+        
+        c.save()
         return filename
 
-    # PRA 1
-    st.subheader("PRA 1 (页数: 1 页)")
-    if st.button("生成 PRA 1 PDF"):
-        pdf_path = generate_dummy_pdf("PRA_1", {"customer": selected_cust, "maid": selected_maid})
-        st.session_state["pra1_path"] = pdf_path
-        st.success("已生成: PRA_1_Filled.pdf")
+    # 循环生成几个核心文件选项
+    docs = ["PRA_1", "IM_12", "IM_38", "Personal_Bond", "Contract_of_Employment"]
+    for d_name in docs:
+        st.subheader(f"{d_name.replace('_', ' ')} (页数: 1 页)")
+        if st.button(f"生成 {d_name} PDF", key=f"btn_{d_name}"):
+            path = generate_real_pdf(d_name, selected_cust, selected_maid, selected_supp)
+            st.session_state[f"{d_name}_path"] = path
+            st.success(f"已成功生成: {d_name}_Filled.pdf")
 
-    if "pra1_path" in st.session_state and os.path.exists(st.session_state["pra1_path"]):
-        with open(st.session_state["pra1_path"], "rb") as f:
-            st.download_button(
-                label="📥 点击下载 PRA_1_Filled.pdf",
-                data=f,
-                file_name="PRA_1_Filled.pdf",
-                mime="application/pdf"
-            )
-
-    st.markdown("---")
-
-    # IM.12
-    st.subheader("IM.12 (页数: 1 页)")
-    if st.button("生成 IM.12 PDF"):
-        pdf_path = generate_dummy_pdf("IM_12", {"customer": selected_cust, "maid": selected_maid})
-        st.session_state["im12_path"] = pdf_path
-        st.success("已生成: IM_12_Filled.pdf")
-
-    if "im12_path" in st.session_state and os.path.exists(st.session_state["im12_path"]):
-        with open(st.session_state["im12_path"], "rb") as f:
-            st.download_button(
-                label="📥 点击下载 IM_12_Filled.pdf",
-                data=f,
-                file_name="IM_12_Filled.pdf",
-                mime="application/pdf"
-            )
+        key_path = f"{d_name}_path"
+        if key_path in st.session_state and os.path.exists(st.session_state[key_path]):
+            with open(st.session_state[key_path], "rb") as f:
+                st.download_button(
+                    label=f"📥 点击下载 {d_name}_Filled.pdf",
+                    data=f,
+                    file_name=f"{d_name}_Filled.pdf",
+                    mime="application/pdf",
+                    key=f"dl_{d_name}"
+                )
+        st.markdown("---")
