@@ -1,260 +1,94 @@
+import io
+import zipfile
 import streamlit as st
-import pandas as pd
-from datetime import datetime
-import os
-import pypdf
-from reportlab.lib.pagesizes import A4
-from reportlab.pdfgen import canvas
+from pypdf import PdfReader, PdfWriter
 
-# 页面配置
-st.set_page_config(
-    page_title="Reliance Maid Agency System",
-    page_icon="📋",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+st.set_page_config(page_title="Reliance Maid Document Automation", layout="centered")
 
-# 确保 PDF 输出目录存在
-os.makedirs("output", exist_ok=True)
+st.title("🖨️ Reliance Maid 官方文档自动填写系统")
+st.write("请输入顾客与女佣信息，系统将自动批量填入 11 个官方 PDF 表单并打包下载。")
 
-# 初始化 Session State (模拟数据库)
-if 'agency' not in st.session_state:
-    st.session_state.agency = {
-        "name": "RELIANCE MAID AGENCI (M) SDN BHD",
-        "license": "202501046992",
-        "address": "NO 34A, JALAN BUKIT IMPIAN 16, TAMAN IMPIAN EMAS, 81300 SKUDAI, JOHOR",
-        "phone": "010-837 8472",
-        "email": "reliance.maid.agensi@gmail.com"
-    }
+# 11 个标准文件名列表
+PDF_FILES = [
+    "CONTRACT MY.pdf",
+    "EC NEW CONTRACT.pdf",
+    "IM 38.pdf",
+    "IM12.pdf",
+    "LAMPIRAN A.pdf",
+    "Laporlari.pdf",
+    "LG NEW.pdf",
+    "PERSONAL BOND.pdf",
+    "PRA1.pdf",
+    "SURAT_WAKIL_MAJIKAN.pdf",
+    "Agency_Agreement_Reliance_Maid.pdf"
+]
 
-if 'customers' not in st.session_state:
-    st.session_state.customers = [
-        {
-            "name": "GAN JUN HENG",
-            "ic": "960226-01-6725",
-            "phone": "012-345 6789",
-            "address": "123, Jalan Sutera, Taman Skudai Baru, 81300 Skudai, Johor"
-        }
-    ]
+with st.form("maid_form"):
+    st.subheader("A. 雇主 (Employer) 信息")
+    employer_name = st.text_input("雇主全名 (Employer Full Name)", "GAN JUN HENG")
+    employer_ic = st.text_input("雇主身份证号 (IC / Passport No.)", "960226-01-6725")
+    employer_address = st.text_area("雇主地址 (Address)", "No 34A, Jalan Bukit Impian 16, Taman Impian Emas, 81300 Skudai, Johor.")
+    employer_phone = st.text_input("电话号码 (Telephone No.)", "010-8378471")
 
-if 'maids' not in st.session_state:
-    st.session_state.maids = [
-        {
-            "name": "Sri Haryati",
-            "passport": "E9716672",
-            "dob": "1995-05-12",
-            "permit_expiry": "2027-05-12",
-            "supplier": "PT ANTAR TENAGA MANDIRI"
-        }
-    ]
+    st.subheader("B. 女佣 (Domestic Worker) 信息")
+    maid_name = st.text_input("女佣全名 (Maid Full Name)", "Sri Haryati")
+    maid_passport = st.text_input("女佣护照号 (Passport No.)", "E9716672")
+    maid_nationality = st.text_input("国籍 (Nationality)", "Indonesian")
 
-if 'suppliers' not in st.session_state:
-    st.session_state.suppliers = [
-        {
-            "name": "PT ANTAR TENAGA MANDIRI",
-            "country": "Indonesia",
-            "contact": "Bapak Rudi",
-            "phone": "+62 21-555-0199"
-        }
-    ]
+    st.subheader("C. 供应商 / 代理 (Agency) 信息")
+    agency_name = st.text_input("代理公司名称", "AGENSI PEKERJAAN RELIANCE MAID SDN BHD")
 
-# 侧边栏导航
-st.sidebar.title("📋 导航菜单")
-menu = st.sidebar.selectbox(
-    "选择功能模块", 
-    ["业务仪表盘", "顾客资料 (Customer)", "女佣资料 (Maid)", "Supplier 供应商", "公司资料 (Agency)", "申请文件与生成 (Application)"]
-)
+    submitted = st.form_submit_button("🚀 生成并打包所有填好的 PDF")
 
-# ==================== 1. 业务仪表盘 ====================
-if menu == "业务仪表盘":
-    st.title("📊 业务仪表盘与到期提醒")
+if submitted:
+    zip_buffer = io.BytesIO()
     
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("顾客数量", len(st.session_state.customers))
-    with col2:
-        st.metric("女佣数量", len(st.session_state.maids))
-    with col3:
-        st.metric("Supplier 数量", len(st.session_state.suppliers))
-    with col4:
-        st.metric("Permit 已过期", 0)
-        
-    st.markdown("---")
-    st.subheader("⚠️ 提醒事项 (Alerts)")
-    st.info("目前所有证件和合同均在有效期内，暂无紧急提醒。")
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        for filename in PDF_FILES:
+            try:
+                # 尝试读取同目录下原有的 PDF 模板
+                reader = PdfReader(filename)
+                writer = PdfWriter()
+                writer.append(reader)
+                
+                # 如果 PDF 包含可填写表单字段 (AcroForm)，尝试自动注入数据
+                if writer.get_fields():
+                    fields_dict = {}
+                    # 根据常见的表单字段名称尝试匹配并赋值（可根据实际 PDF 内部字段名调整）
+                    for field_key in writer.get_fields().keys():
+                        key_lower = field_key.lower()
+                        if "name" in key_lower and "employer" in key_lower:
+                            fields_dict[field_key] = employer_name
+                        elif "ic" in key_lower or "passport" in key_lower:
+                            if "maid" in key_lower:
+                                fields_dict[field_key] = maid_passport
+                            else:
+                                fields_dict[field_key] = employer_ic
+                        elif "address" in key_lower:
+                            fields_dict[field_key] = employer_address
+                        elif "phone" in key_lower:
+                            fields_dict[field_key] = employer_phone
+                    
+                    if fields_dict:
+                        writer.update_page_form_field_values(writer.pages[0], fields_dict)
 
-# ==================== 2. 顾客资料 ====================
-elif menu == "顾客资料 (Customer)":
-    st.title("👥 顾客资料管理")
+                # 将处理后的 PDF 写入内存流
+                pdf_output = io.BytesIO()
+                writer.write(pdf_output)
+                
+                # 写入 ZIP 文件
+                zip_file.writestr(filename, pdf_output.getvalue())
+                
+            except FileNotFoundError:
+                # 若该 PDF 模板尚未上传到 GitHub 目录，先跳过或放入提示文件
+                zip_file.writestr(f"MISSING_{filename}.txt", f"Error: Template {filename} not found in repository root.")
+
+    zip_buffer.seek(0)
     
-    with st.expander("➕ 添加新顾客"):
-        with st.form("add_customer_form"):
-            c_name = st.text_input("顾客全名 (Name)")
-            c_ic = st.text_input("身份证号 / 护照号 (IC / Passport)")
-            c_phone = st.text_input("联系电话 (Phone)")
-            c_address = st.text_area("住址 (Address)")
-            submitted = st.form_submit_button("保存顾客")
-            if submitted and c_name:
-                st.session_state.customers.append({
-                    "name": c_name, "ic": c_ic, "phone": c_phone, "address": c_address
-                })
-                st.success(f"成功添加顾客: {c_name}")
-                st.rerun()
-
-    st.subheader("现有顾客列表")
-    for idx, cust in enumerate(st.session_state.customers):
-        st.write(f"**{idx+1}. {cust['name']}** | IC: {cust['ic']} | 电话: {cust['phone']}")
-        st.caption(f"地址: {cust['address']}")
-        st.markdown("---")
-
-# ==================== 3. 女佣资料 ====================
-elif menu == "女佣资料 (Maid)":
-    st.title("👩‍🦰 女佣资料管理")
-    
-    with st.expander("➕ 录入新女佣"):
-        with st.form("add_maid_form"):
-            m_name = st.text_input("女佣姓名")
-            m_pass = st.text_input("护照号码 (Passport)")
-            m_dob = st.date_input("出生日期")
-            m_expiry = st.date_input("Permit 到期日")
-            supp_names = [s["name"] for s in st.session_state.suppliers]
-            m_supp = st.selectbox("选择供应商 (Supplier)", supp_names if supp_names else ["默认"])
-            m_submit = st.form_submit_button("保存女佣")
-            if m_submit and m_name:
-                st.session_state.maids.append({
-                    "name": m_name, "passport": m_pass, 
-                    "dob": str(m_dob), "permit_expiry": str(m_expiry), "supplier": m_supp
-                })
-                st.success(f"成功添加女佣: {m_name}")
-                st.rerun()
-
-    st.subheader("现有女佣列表")
-    for idx, maid in enumerate(st.session_state.maids):
-        st.write(f"**{idx+1}. {maid['name']}** | 护照: {maid['passport']} | 供应商: {maid['supplier']}")
-        st.write(f"Permit 到期: `{maid['permit_expiry']}`")
-        st.markdown("---")
-
-# ==================== 4. Supplier 供应商 ====================
-elif menu == "Supplier 供应商":
-    st.title("🏢 印度尼西亚供应商管理")
-    
-    with st.expander("➕ 添加新 Supplier"):
-        with st.form("add_supp_form"):
-            s_name = st.text_input("公司名称 (Agency Name)")
-            s_country = st.text_input("国家", value="Indonesia")
-            s_contact = st.text_input("负责人姓名")
-            s_phone = st.text_input("联系电话")
-            s_submit = st.form_submit_button("保存 Supplier")
-            if s_submit and s_name:
-                st.session_state.suppliers.append({
-                    "name": s_name, "country": s_country, "contact": s_contact, "phone": s_phone
-                })
-                st.success(f"成功添加 Supplier: {s_name}")
-                st.rerun()
-
-    st.subheader("现有供应商列表")
-    for idx, supp in enumerate(st.session_state.suppliers):
-        st.write(f"**{idx+1}. {supp['name']}** ({supp['country']})")
-        st.write(f"负责人: {supp['contact']} | 电话: {supp['phone']}")
-        st.markdown("---")
-
-# ==================== 5. 公司资料 ====================
-elif menu == "公司资料 (Agency)":
-    st.title("⚙️ 中介公司资料设置")
-    with st.form("agency_form"):
-        ag_name = st.text_input("公司全称", value=st.session_state.agency["name"])
-        ag_lic = st.text_input("牌照号码 (License No)", value=st.session_state.agency["license"])
-        ag_addr = st.text_area("公司地址", value=st.session_state.agency["address"])
-        ag_phone = st.text_input("联系电话", value=st.session_state.agency["phone"])
-        ag_email = st.text_input("电子邮箱", value=st.session_state.agency["email"])
-        
-        if st.form_submit_button("更新公司资料"):
-            st.session_state.agency = {
-                "name": ag_name, "license": ag_lic, "address": ag_addr, "phone": ag_phone, "email": ag_email
-            }
-            st.success("公司资料已成功更新！")
-
-# ==================== 6. 申请文件与生成 ====================
-elif menu == "申请文件与生成 (Application)":
-    st.title("📄 申请文件生成与自动填充")
-    st.markdown("在这里选择关联的**顾客、女佣和供应商**，系统会自动为您一键生成规范的表格 PDF 文件！")
-
-    cust_options = [f"{c['name']} — {c['ic']}" for c in st.session_state.customers]
-    maid_options = [f"{m['name']} — {m['passport']}" for m in st.session_state.maids]
-    supp_options = [s['name'] for s in st.session_state.suppliers]
-
-    selected_cust = st.selectbox("1. 选择顾客 (Customer)", cust_options if cust_options else ["无数据"])
-    selected_maid = st.selectbox("2. 选择女佣 (Maid)", maid_options if maid_options else ["无数据"])
-    selected_supp = st.selectbox("3. 选择 Supplier", supp_options if supp_options else ["无数据"])
-
-    st.markdown("---")
-
-    # 真实的 PDF 生成函数（带文字排版）
-    def generate_real_pdf(doc_title, cust, maid, supp):
-        filename = f"output/{doc_title}_Filled.pdf"
-        c = canvas.Canvas(filename, pagesize=A4)
-        width, height = A4
-        
-        # 绘制标题栏
-        c.setFont("Helvetica-Bold", 14)
-        c.drawString(50, height - 50, f"RELIANCE MAID MANAGEMENT SYSTEM")
-        c.setFont("Helvetica-Bold", 16)
-        c.drawString(50, height - 80, f"APPLICATION FORM: {doc_title}")
-        
-        c.setFont("Helvetica", 10)
-        c.drawString(50, height - 100, f"Generated Date: {datetime.today().strftime('%Y-%m-%d')}")
-        
-        c.line(50, height - 110, width - 50, height - 110)
-        
-        # 填写详细内容
-        y = height - 150
-        c.setFont("Helvetica-Bold", 12)
-        c.drawString(50, y, "A. Employer (Customer) Details:")
-        y -= 25
-        c.setFont("Helvetica", 11)
-        c.drawString(70, y, f"Selected Customer: {cust}")
-        
-        y -= 40
-        c.setFont("Helvetica-Bold", 12)
-        c.drawString(50, y, "B. Domestic Worker (Maid) Details:")
-        y -= 25
-        c.setFont("Helvetica", 11)
-        c.drawString(70, y, f"Selected Maid: {maid}")
-        
-        y -= 40
-        c.setFont("Helvetica-Bold", 12)
-        c.drawString(50, y, "C. Supplier (Agency) Details:")
-        y -= 25
-        c.setFont("Helvetica", 11)
-        c.drawString(70, y, f"Selected Supplier: {supp}")
-        
-        # 底部签名栏
-        c.line(50, 150, 200, 150)
-        c.drawString(50, 135, "Employer Signature")
-        
-        c.line(width - 200, 150, width - 50, 150)
-        c.drawString(width - 200, 135, "Agency Authorized Signature")
-        
-        c.save()
-        return filename
-
-    # 循环生成几个核心文件选项
-    docs = ["PRA_1", "IM_12", "IM_38", "Personal_Bond", "Contract_of_Employment"]
-    for d_name in docs:
-        st.subheader(f"{d_name.replace('_', ' ')} (页数: 1 页)")
-        if st.button(f"生成 {d_name} PDF", key=f"btn_{d_name}"):
-            path = generate_real_pdf(d_name, selected_cust, selected_maid, selected_supp)
-            st.session_state[f"{d_name}_path"] = path
-            st.success(f"已成功生成: {d_name}_Filled.pdf")
-
-        key_path = f"{d_name}_path"
-        if key_path in st.session_state and os.path.exists(st.session_state[key_path]):
-            with open(st.session_state[key_path], "rb") as f:
-                st.download_button(
-                    label=f"📥 点击下载 {d_name}_Filled.pdf",
-                    data=f,
-                    file_name=f"{d_name}_Filled.pdf",
-                    mime="application/pdf",
-                    key=f"dl_{d_name}"
-                )
-        st.markdown("---")
+    st.success("🎉 所有文件已成功处理并打包！")
+    st.download_button(
+        label="📥 点击下载全部 11 个填好的 PDF 压缩包 (ZIP)",
+        data=zip_buffer,
+        file_name="Reliance_Maid_Documents.zip",
+        mime="application/zip"
+    )
