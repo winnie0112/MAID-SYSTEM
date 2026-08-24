@@ -16,7 +16,7 @@ if "maids" not in st.session_state:
     st.session_state.maids = [{
         "name": "SRI HARYATI", 
         "passport": "E9716672", 
-        "nationality": "INDONESIAN",
+        "nationality": "INDONESIA",
         "dob": "23 OCT 1988"
     }]
 if "suppliers" not in st.session_state:
@@ -43,6 +43,75 @@ PDF_FILES = [
     "SURAT_WAKIL_MAJIKAN.pdf",
     "Agency_Agreement_Reliance_Maid.pdf"
 ]
+
+# 辅助函数：在 PDF 格子中填字
+def fill_boxes(page, text, start_x, start_y, box_spacing=12, font_size=9):
+    text = str(text).upper()
+    for i, char in enumerate(text):
+        if char != " ":
+            current_x = start_x + (i * box_spacing)
+            page.insert_text((current_x, start_y), char, fontsize=font_size, color=(0, 0, 0))
+
+# 辅助函数：针对不同文件进行字段填充
+def fill_specific_pdf(filename, page, emp, maid, supp):
+    # 统一将文件名转大写去匹配
+    fname = filename.upper()
+    
+    if "PRA1" in fname:
+        # Borang PRA 1 (方格表)
+        fill_boxes(page, emp['name'], start_x=120, start_y=190, box_spacing=13)  # 雇主姓名
+        fill_boxes(page, emp['ic'], start_x=120, start_y=225, box_spacing=13)    # 身份证
+        fill_boxes(page, emp['phone'], start_x=120, start_y=385, box_spacing=13) # 电话
+        fill_boxes(page, maid['name'], start_x=120, start_y=510, box_spacing=13) # 女佣姓名
+        fill_boxes(page, maid['passport'], start_x=320, start_y=555, box_spacing=13) # 女佣护照
+        
+    elif "IM12" in fname:
+        # IM.12 表格
+        page.insert_text((150, 260), maid['name'], fontsize=10, color=(0, 0, 0))
+        page.insert_text((150, 310), maid['dob'], fontsize=10, color=(0, 0, 0))
+        page.insert_text((350, 310), maid['nationality'], fontsize=10, color=(0, 0, 0))
+        page.insert_text((150, 350), maid['passport'], fontsize=10, color=(0, 0, 0))
+        page.insert_text((150, 430), emp['name'], fontsize=10, color=(0, 0, 0))
+        page.insert_text((150, 450), emp['ic'], fontsize=10, color=(0, 0, 0))
+        page.insert_text((150, 470), emp['phone'], fontsize=10, color=(0, 0, 0))
+        page.insert_text((150, 490), emp['address'], fontsize=9, color=(0, 0, 0))
+        
+    elif "IM 38" in fname or "IM38" in fname:
+        # IM.38 签证申请表
+        page.insert_text((150, 180), maid['name'], fontsize=10, color=(0, 0, 0))
+        page.insert_text((150, 220), maid['dob'], fontsize=10, color=(0, 0, 0))
+        page.insert_text((150, 260), maid['nationality'], fontsize=10, color=(0, 0, 0))
+        page.insert_text((150, 300), maid['passport'], fontsize=10, color=(0, 0, 0))
+        page.insert_text((150, 350), emp['address'], fontsize=9, color=(0, 0, 0))
+        
+    elif "PERSONAL BOND" in fname:
+        # Personal Bond
+        page.insert_text((150, 150), maid['name'], fontsize=10, color=(0, 0, 0))
+        page.insert_text((220, 250), emp['name'], fontsize=10, color=(0, 0, 0))
+        page.insert_text((400, 250), emp['ic'], fontsize=10, color=(0, 0, 0))
+        page.insert_text((150, 270), emp['address'], fontsize=9, color=(0, 0, 0))
+        
+    elif "LAMPIRAN A" in fname:
+        # Lampiran A
+        page.insert_text((200, 120), emp['name'], fontsize=10, color=(0, 0, 0))
+        page.insert_text((350, 140), emp['ic'], fontsize=10, color=(0, 0, 0))
+        page.insert_text((150, 160), emp['address'], fontsize=9, color=(0, 0, 0))
+        page.insert_text((300, 230), maid['nationality'], fontsize=10, color=(0, 0, 0))
+        page.insert_text((200, 250), maid['passport'], fontsize=10, color=(0, 0, 0))
+        
+    elif "SURAT_WAKIL_MAJIKAN" in fname:
+        # Surat Wakil Majikan
+        page.insert_text((250, 120), emp['name'], fontsize=10, color=(0, 0, 0))
+        page.insert_text((420, 120), emp['ic'], fontsize=10, color=(0, 0, 0))
+        page.insert_text((250, 200), maid['name'], fontsize=10, color=(0, 0, 0))
+        page.insert_text((450, 200), maid['passport'], fontsize=10, color=(0, 0, 0))
+        page.insert_text((250, 400), emp['name'], fontsize=10, color=(0, 0, 0))
+        page.insert_text((250, 420), emp['ic'], fontsize=10, color=(0, 0, 0))
+        
+    else:
+        # 默认通用兜底：把核心信息打在页首，防止报错
+        info_text = f"EMPLOYER: {emp['name']} | IC: {emp['ic']} | MAID: {maid['name']} ({maid['passport']})"
+        page.insert_text((50, 40), info_text, fontsize=9, color=(0, 0, 0))
 
 # 1. 仪表盘页面
 if menu == "业务仪表盘与到期提醒":
@@ -77,10 +146,11 @@ elif menu == "➕ 添加与管理资料":
         with st.form("add_maid_form"):
             m_name = st.text_input("女佣全名", value="SRI HARYATI")
             m_pass = st.text_input("女佣护照号", value="E9716672")
-            m_nat = st.text_input("国籍", value="INDONESIAN")
+            m_nat = st.text_input("国籍", value="INDONESIA")
+            m_dob = st.text_input("出生日期", value="23 OCT 1988")
             submitted_m = st.form_submit_button("保存女佣资料")
             if submitted_m and m_name:
-                st.session_state.maids.append({"name": m_name, "passport": m_pass, "nationality": m_nat})
+                st.session_state.maids.append({"name": m_name, "passport": m_pass, "nationality": m_nat, "dob": m_dob})
                 st.success(f"成功添加女佣: {m_name}")
                 
     with tab3:
@@ -92,7 +162,7 @@ elif menu == "➕ 添加与管理资料":
                 st.session_state.suppliers.append({"name": s_name, "contact": s_contact})
                 st.success(f"成功添加 Supplier: {s_name}")
 
-# 3. 独立下载 PDF 页面（带自动填表逻辑）
+# 3. 独立下载 PDF 页面
 elif menu == "🖨️ 独立选择并下载 PDF":
     st.subheader("🖨️ 选择关联资料并单独下载文档")
     
@@ -103,10 +173,8 @@ elif menu == "🖨️ 独立选择并下载 PDF":
         selected_maid = st.selectbox("选择女佣 (Maid)", st.session_state.maids, format_func=lambda x: x["name"])
         selected_supp = st.selectbox("选择供应商 (Supplier)", st.session_state.suppliers, format_func=lambda x: x["name"])
         
-        agency_name = st.text_input("本公司名称 (Agency)", "AGENSI PEKERJAAN RELIANCE MAID SDN BHD")
-
         st.markdown("---")
-        st.write("### 📄 自动填表及单文件下载列表")
+        st.write("### 📄 全部 11 个 PDF 自动填表及单文件下载列表")
 
         for filename in PDF_FILES:
             col_name, col_btn = st.columns([3, 1])
@@ -114,29 +182,17 @@ elif menu == "🖨️ 独立选择并下载 PDF":
             
             pdf_bytes = None
             try:
-                # 打开对应的 PDF 模板
                 doc = fitz.open(filename)
-                page = doc[0]  # 默认在第一页注入数据（后续可针对不同文件微调坐标）
+                page = doc[0]  # 默认处理第一页
                 
-                # 动态把选中的资料写到 PDF 页面特定位置（示例坐标，可根据实际排版调整）
-                # 这里我们在每一页的顶部或空白处写入核心关联信息，确保生成的文件带有当前客户数据
-                info_text = f"EMPLOYER: {selected_emp['name']} | IC: {selected_emp['ic']} | MAID: {selected_maid['name']} ({selected_maid['passport']})"
-                
-                # 在 PDF 第一页左上角打印一行系统合成数据（作为基础填表演示）
-                page.insert_text((50, 40), info_text, fontsize=9, color=(0, 0, 0))
-                
-                # 针对 Surat Wakil Majikan 或 PRA1 的特殊文字注入
-                if filename == "SURAT_WAKIL_MAJIKAN.pdf":
-                    page.insert_text((100, 150), selected_emp['name'], fontsize=10, color=(0, 0, 0))
-                elif filename == "PRA1.pdf":
-                    page.insert_text((120, 200), selected_emp['name'], fontsize=10, color=(0, 0, 0))
+                # 调用填表函数，把数据精准写进对应的 PDF
+                fill_specific_pdf(filename, page, selected_emp, selected_maid, selected_supp)
                 
                 output_pdf = io.BytesIO()
                 doc.save(output_pdf)
                 doc.close()
                 pdf_bytes = output_pdf.getvalue()
             except Exception as e:
-                # 容错处理
                 pdf_bytes = f"Error processing {filename}: {str(e)}".encode()
 
             with col_btn:
